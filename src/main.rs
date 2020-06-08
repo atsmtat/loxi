@@ -47,4 +47,5 @@ fn run(source: String) {
     let mut scanner = scanner::Scanner::new(&source);
     scanner.scan_tokens();
     println!( "{:?}", scanner.tokens );
+    loxi::print_ast_dummy();
 }

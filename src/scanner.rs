@@ -88,10 +88,13 @@ impl<'a> Scanner<'a> {
 	    _ => Unknown,
 	};
 
-	if token_type == Unknown {
-	    self.report_error("Unknown character {}", curr_char);
-	} else if token_type != WhiteSpace {
-	    self.tokens.push(Token::new(token_type, self.line_num));
+	match token_type {
+	    Unknown => {
+		self.report_error(format!("Unknown character {}", curr_char).as_str());
+	    }
+
+	    WhiteSpace => {},
+	    _ => self.tokens.push(Token::new(token_type, self.line_num)),
 	}
     }
 
