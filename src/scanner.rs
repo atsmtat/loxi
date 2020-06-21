@@ -100,10 +100,7 @@ impl<'a> Scanner<'a> {
 
     // consumes next char and returns it
     fn advance(&mut self) -> Option<char> {
-        if let Some(c) = self.iter.next() {
-	    return Some(c);
-        }
-        return None;
+	self.iter.next()
     }
 
     // peeks next char without consuming it, and returns it

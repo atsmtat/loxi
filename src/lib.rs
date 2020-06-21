@@ -1,6 +1,7 @@
 pub mod scanner;
 pub mod token;
 pub mod ast;
+pub mod parser;
 
 pub fn print_ast_dummy() {
     let expr_kind = ast::ExprKind::LitExpr(ast::Lit::Double(4.2));

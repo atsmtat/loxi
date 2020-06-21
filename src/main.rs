@@ -1,4 +1,5 @@
 use loxi::scanner;
+use loxi::parser;
 use std::env;
 use std::fs;
 use std::io;
@@ -47,5 +48,8 @@ fn run(source: String) {
     let mut scanner = scanner::Scanner::new(&source);
     scanner.scan_tokens();
     println!( "{:?}", scanner.tokens );
-    loxi::print_ast_dummy();
+    let mut parser = parser::Parser::new(&scanner.tokens);
+    if let Some(ast) = parser.parse() {
+	loxi::print_ast(&ast);
+    }
 }

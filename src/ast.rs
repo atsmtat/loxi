@@ -23,7 +23,10 @@ pub enum ExprKind {
     UnaryExpr(Token, Box<Expr>),
 
     // literal
-    LitExpr(Lit)
+    LitExpr(Lit),
+    
+    // identifier
+    IdentExpr(Token),
 }
 
 pub trait Visitor : Sized {
@@ -80,6 +83,9 @@ impl<'ast> Visitor for AstPrinter<'ast> {
 	    }
 	    ExprKind::LitExpr(lit) => {
 		write!(&mut self.ast_print, "{:?}", lit).unwrap();
+	    }
+	    ExprKind::IdentExpr(tok) => {
+		write!(&mut self.ast_print, "{:?}", tok.token_type).unwrap();
 	    }
 	}
 	walk_expr(self, expr);

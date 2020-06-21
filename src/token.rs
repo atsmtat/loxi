@@ -1,4 +1,5 @@
-#[derive(Debug)]
+
+#[derive(Clone, Debug, PartialEq)]
 pub enum TokenType {
 
     // single character
@@ -52,7 +53,7 @@ pub enum TokenType {
     Eof,
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct Token {
     pub token_type: TokenType,
     pub line: u32,
