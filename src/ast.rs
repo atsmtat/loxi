@@ -8,8 +8,10 @@ pub struct Expr {
 
 #[derive(Debug)]
 pub enum Lit {
-    Str(String),
+    Nil,
+    Boolean(bool),
     Double(f64),
+    Str(String),
 }
 
 pub enum ExprKind {
@@ -25,16 +27,11 @@ pub enum ExprKind {
     // literal
     LitExpr(Lit),
     
-    // identifier
-    IdentExpr(Token),
 }
 
 pub trait Visitor : Sized {
-    type VisRet : Default;
-    fn visit_expr(&mut self, expr:&Expr) -> Self::VisRet {
-	walk_expr(self, expr);
-	Self::VisRet::default()
-    }
+    type VisRet;
+    fn visit_expr(&mut self, expr:&Expr) -> Self::VisRet;
 }
 
 pub fn walk_expr<V: Visitor>(visitor:&mut V, expr:&Expr) {
@@ -44,7 +41,8 @@ pub fn walk_expr<V: Visitor>(visitor:&mut V, expr:&Expr) {
 	    visitor.visit_expr(right);
 	}
 
-	ExprKind::ParenExpr(e) | ExprKind::UnaryExpr(_, e) => {
+	ExprKind::ParenExpr(e) |
+	ExprKind::UnaryExpr(_, e) => {
 	    visitor.visit_expr(e);
 	}
 	_ => {}
@@ -83,9 +81,6 @@ impl<'ast> Visitor for AstPrinter<'ast> {
 	    }
 	    ExprKind::LitExpr(lit) => {
 		write!(&mut self.ast_print, "{:?}", lit).unwrap();
-	    }
-	    ExprKind::IdentExpr(tok) => {
-		write!(&mut self.ast_print, "{:?}", tok.token_type).unwrap();
 	    }
 	}
 	walk_expr(self, expr);

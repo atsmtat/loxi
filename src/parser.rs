@@ -158,12 +158,23 @@ impl<'a> Parser<'a> {
 		let expr_kind = ast::ExprKind::LitExpr(lit);
  		Ok(Box::new(ast::Expr{ expr_kind }))
 	    }
-	    TokenType::Nil |
-	    TokenType::True |
-	    TokenType::False =>  {
+	    TokenType::Nil => {
 		self.advance();
-		let expr_kind = ast::ExprKind::IdentExpr(tok.clone());
-		Ok(Box::new(ast::Expr{expr_kind}))
+		let lit = ast::Lit::Nil;
+		let expr_kind = ast::ExprKind::LitExpr(lit);
+ 		Ok(Box::new(ast::Expr{ expr_kind }))
+	    }
+	    TokenType::True => {
+		self.advance();
+		let lit = ast::Lit::Boolean(true);
+		let expr_kind = ast::ExprKind::LitExpr(lit);
+ 		Ok(Box::new(ast::Expr{ expr_kind }))
+	    }
+	    TokenType::False => {
+		self.advance();
+		let lit = ast::Lit::Boolean(false);
+		let expr_kind = ast::ExprKind::LitExpr(lit);
+ 		Ok(Box::new(ast::Expr{ expr_kind }))
 	    }
 	    _ => {
 		let msg = format!( "unexpected token {:?}", tok.token_type);

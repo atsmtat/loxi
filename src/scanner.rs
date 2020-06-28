@@ -6,7 +6,7 @@ pub struct Scanner<'a> {
     pub tokens: Vec<Token>,
     line_num: u32,
     iter: Chars<'a>,
-    error: bool,
+    pub has_error: bool,
 }
 
 impl<'a> Scanner<'a> {
@@ -15,7 +15,7 @@ impl<'a> Scanner<'a> {
             tokens: Vec::new(),
             line_num: 1,
             iter: src.chars(),
-	    error: false,
+	    has_error: false,
         }
     }
 
@@ -259,7 +259,7 @@ impl<'a> Scanner<'a> {
     }
 
     fn report_error(&mut self, msg: &str) {
-	self.error = true;
+	self.has_error = true;
 	println!("{}: error: {}", self.line_num, msg);
     }
 }
