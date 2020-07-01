@@ -1,3 +1,8 @@
+// program -> statement* EOF
+// statement -> expr_stmt
+//            | print_stmt
+// expr_stmt -> expression ';'
+// print_stmt -> Print expression ';'
 // expression -> equality
 // equality -> comparison (( '==' | '!=' ) comparison)*
 // comparison -> addition (( '>' | '>=' | '<' | '<=') addition)*
@@ -33,11 +38,49 @@ impl<'a> Parser<'a> {
 	}
     }
 
-    pub fn parse(&mut self) -> Option<Box<ast::Expr>> {
-	if let Ok(expr) = self.expression() {
-	    return Some(expr);
+    pub fn parse(&mut self) -> Option<Vec<Box<ast::Stmt>>> {
+	if let Ok(stmts) = self.program() {
+	    return Some(stmts);
 	}
 	return None;
+    }
+
+    fn program(&mut self) -> Result<Vec<Box<ast::Stmt>>, ParseError> {
+	let mut stmts = Vec::new();
+	while self.peek().token_type != TokenType::Eof {
+	    let stmt = self.statement()?;
+	    stmts.push(stmt);
+	}
+	Ok(stmts)
+    }
+
+    fn statement(&mut self) -> Result<Box<ast::Stmt>, ParseError> {
+	let tok = self.peek();
+	match &tok.token_type {
+	    TokenType::Print => {
+		// consume "print"
+		self.advance();
+
+		self.print_stmt()
+	    }
+	    _ => {
+		self.expr_stmt()
+	    }
+	}
+    }
+
+    fn expr_stmt(&mut self) ->  Result<Box<ast::Stmt>, ParseError> {
+	let expr = self.expression()?;
+	self.expect(TokenType::Semicolon)?;
+	let stmt_kind = ast::StmtKind::ExprStmt(expr);
+	Ok(Box::new(ast::Stmt { stmt_kind }))
+    }
+
+    fn print_stmt(&mut self) ->  Result<Box<ast::Stmt>, ParseError> {
+	let expr = self.expression()?;
+	self.expect(TokenType::Semicolon)?;
+	let stmt_kind = ast::StmtKind::PrintStmt(expr);
+	Ok(Box::new(ast::Stmt { stmt_kind }))
     }
 
     fn expression(&mut self) -> Result<Box<ast::Expr>, ParseError> {

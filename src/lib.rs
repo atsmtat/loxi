@@ -53,9 +53,9 @@ fn run(source: String) -> Result<(), Error> {
 
     let mut parser = parser::Parser::new(&scanner.tokens);
     match parser.parse() {
-	Some(ast) => {
+	Some(ref stmts) => {
 	    let mut interpreter = interpreter::Interpreter::new();
-	    interpreter.run(&ast);
+	    interpreter.run(stmts);
 	    if interpreter.has_error {
 		return Err(Error::RuntimeError);
 	    }

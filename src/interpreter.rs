@@ -1,5 +1,5 @@
 use crate::ast;
-use crate::ast::{Expr, ExprKind, Lit, Visitor};
+use crate::ast::{Expr, ExprKind, Stmt, StmtKind, Lit, Visitor};
 use crate::token::{TokenType, Token};
 
 #[derive(Debug)]
@@ -30,6 +30,7 @@ impl LoxValue {
             _ => true,
         }
     }
+
 }
 
 pub enum RuntimeError {
@@ -46,9 +47,13 @@ impl Interpreter {
 	Interpreter{ has_error: false }
     }
 
-    pub fn run(&mut self, expr:&Expr) {
-	if let Ok(result) = self.visit_expr(expr) {
-	    println!("{:?}", result);
+    pub fn run(&mut self, stmts:& Vec<Box<Stmt>>) {
+	for stmt in stmts {
+	    let res = self.visit_stmt( stmt );
+	    match res {
+		Err(_) => break,
+		Ok(_) => {}
+	    }
 	}
     }
 
@@ -162,8 +167,10 @@ impl Interpreter {
 }
 
 impl ast::Visitor for Interpreter {
-    type VisRet = Result<LoxValue, RuntimeError>;
-    fn visit_expr(&mut self, expr: &Expr) -> Self::VisRet {
+    type ExprRet = Result<LoxValue, RuntimeError>;
+    type StmtRet = Result<(), RuntimeError>;
+
+    fn visit_expr(&mut self, expr: &Expr) -> Self::ExprRet {
         match expr.expr_kind {
             ExprKind::LitExpr(ref lit) => {
                 let lox_type = match lit {
@@ -202,5 +209,19 @@ impl ast::Visitor for Interpreter {
                 self.eval_binary_op(&left_val, &right_val, &tok)
             }
         }
+    }
+
+    fn visit_stmt(&mut self, stmt: &Stmt) -> Self::StmtRet {
+	match stmt.stmt_kind {
+	    StmtKind::ExprStmt(ref expr) => {
+		self.visit_expr(expr)?;
+		Ok(())
+	    }
+	    StmtKind::PrintStmt(ref expr) => {
+		let val = self.visit_expr(expr)?;
+		println!("{:?}", val);
+		Ok(())
+	    }
+	}
     }
 }

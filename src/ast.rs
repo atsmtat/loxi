@@ -29,9 +29,20 @@ pub enum ExprKind {
     
 }
 
+pub struct Stmt {
+    pub stmt_kind : StmtKind,
+}
+
+pub enum StmtKind {
+    ExprStmt(Box<Expr>),
+    PrintStmt(Box<Expr>),
+}
+
 pub trait Visitor : Sized {
-    type VisRet;
-    fn visit_expr(&mut self, expr:&Expr) -> Self::VisRet;
+    type ExprRet;
+    type StmtRet;
+    fn visit_expr(&mut self, expr:&Expr) -> Self::ExprRet;
+    fn visit_stmt(&mut self, stmt:&Stmt) -> Self::StmtRet;
 }
 
 pub fn walk_expr<V: Visitor>(visitor:&mut V, expr:&Expr) {
@@ -46,6 +57,17 @@ pub fn walk_expr<V: Visitor>(visitor:&mut V, expr:&Expr) {
 	    visitor.visit_expr(e);
 	}
 	_ => {}
+    }
+}
+
+pub fn walk_stmt<V: Visitor>(visitor:&mut V, stmt:&Stmt) {
+    match stmt.stmt_kind {
+	StmtKind::ExprStmt(ref expr) => {
+	    visitor.visit_expr(expr);
+	}
+	StmtKind::PrintStmt(ref expr) => {
+	    visitor.visit_expr(expr);
+	}
     }
 }
 
@@ -68,8 +90,9 @@ impl<'ast> AstPrinter<'ast> {
 }
 
 impl<'ast> Visitor for AstPrinter<'ast> {
-    type VisRet = ();
-    fn visit_expr(&mut self, expr:&Expr) -> Self::VisRet {
+    type ExprRet = ();
+    type StmtRet = ();
+    fn visit_expr(&mut self, expr:&Expr) -> Self::ExprRet {
 	self.ast_print.push( '(' );
 	match &expr.expr_kind {
 	    ExprKind::BinaryExpr(_, tok, _) => {
@@ -84,6 +107,16 @@ impl<'ast> Visitor for AstPrinter<'ast> {
 	    }
 	}
 	walk_expr(self, expr);
+	self.ast_print.push(')');
+    }
+
+    fn visit_stmt(&mut self, stmt:&Stmt) -> Self::StmtRet {
+	self.ast_print.push( '(' );
+	match stmt.stmt_kind {
+	    StmtKind::ExprStmt(_) => self.ast_print.push_str("expr stmt"),
+	    StmtKind::PrintStmt(_) => self.ast_print.push_str("print stmt"),
+	}
+	walk_stmt(self, stmt);
 	self.ast_print.push(')');
     }
 }
