@@ -8,7 +8,9 @@
 // expr_stmt -> expression ';'
 // print_stmt -> Print expression ';'
 //
-// expression -> equality
+// expression -> assignment
+// assignment -> IDENTIFIER '=' assignment
+//             | equality
 // equality -> comparison (( '==' | '!=' ) comparison)*
 // comparison -> addition (( '>' | '>=' | '<' | '<=') addition)*
 // addition -> multiplication (('+' | '-' ) multiplication)*
@@ -34,6 +36,7 @@ pub struct Parser<'a> {
 enum ParseError {
     MismatchedToken,
     UnexpectedToken,
+    InvalidAssignmentTarget,
 }
 
 impl<'a> Parser<'a> {
@@ -129,7 +132,33 @@ impl<'a> Parser<'a> {
     }
 
     fn expression(&mut self) -> Result<Box<ast::Expr>, ParseError> {
-	self.equality()
+	self.assignment()
+    }
+
+    fn assignment(&mut self) -> Result<Box<ast::Expr>, ParseError> {
+	// Parse assignment target as if it's an expression, as target
+	// could have a complex syntax which is already captured by expression,
+	// Later, we'll check if it's a valid target.
+	let expr = self.equality()?;
+	match self.peek().token_type {
+	    TokenType::Equal => {
+		// consume '='
+		let eq_tok = self.advance();
+
+		match expr.expr_kind {
+		    ast::ExprKind::Variable(ident) => {
+			let rval = self.assignment()?;
+			let expr_kind = ast::ExprKind::Assign(ident, rval);
+			Ok(Box::new(ast::Expr{expr_kind}))
+		    }
+		    _ => {
+			self.report_error(&eq_tok, "Invalid assignment target");
+			Err(ParseError::InvalidAssignmentTarget)
+		    }
+		}
+	    }
+	    _ => Ok(expr),
+	}
     }
 
     fn equality(&mut self) -> Result<Box<ast::Expr>, ParseError> {

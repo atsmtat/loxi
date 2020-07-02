@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 use crate::ast;
-use crate::ast::{Expr, ExprKind, Stmt, StmtKind, Lit, Visitor};
+use crate::ast::{Expr, ExprKind, Stmt, StmtKind, Lit, Ident, Visitor};
 use crate::token::{TokenType, Token};
 
 #[derive(Clone, Debug)]
@@ -49,12 +49,25 @@ impl Environment {
 	Environment{ values : HashMap::new() }
     }
 
-    pub fn define(&mut self, name:&str, value:LoxValue) {
-	self.values.insert(name.to_string(), value);
+    pub fn define(&mut self, ident:&Ident, value:LoxValue) {
+	self.values.insert(ident.name.clone(), value);
     }
 
-    pub fn get(&self, name:&str) -> Option<&LoxValue> {
-	self.values.get(name)
+    pub fn get(&self, ident:&Ident) -> Option<LoxValue> {
+	if let Some(lv) = self.values.get(&ident.name) {
+	    Some(lv.clone())
+	} else {
+	    None
+	}
+    }
+
+    pub fn assign(&mut self, ident:&Ident, value:LoxValue) -> bool {
+	if self.values.contains_key(&ident.name) {
+	    self.values.insert(ident.name.clone(), value);
+	    true
+	} else {
+	    false
+	}
     }
 }
 
@@ -235,14 +248,26 @@ impl ast::Visitor for Interpreter {
             }
 
 	    ExprKind::Variable(ref ident) => {
-		let val = self.environment.get(&ident.name);
+		let val = self.environment.get(ident);
 		match val {
-		    Some(v) => Ok((*v).clone()),
 		    None => {
-			let err_msg = format!( "undefined variable '{}'", ident.name);
+			let err_msg = format!( "undefined variable '{}'", &ident.name);
 			self.report_error(&ident.tok, &err_msg);
 			Err(RuntimeError::UndefinedVariable)
 		    }
+		    Some(v) => Ok(v),
+		}
+	    }
+
+	    ExprKind::Assign(ref ident, ref expr) => {
+		let rval = self.evaluate(expr)?;
+		let ret_copy = rval.clone();
+		if self.environment.assign(ident, rval) {
+		    Ok(ret_copy)
+		} else {
+		    let err_msg = format!( "undefined variable '{}'", &ident.name);
+		    self.report_error(&ident.tok, &err_msg);
+		    Err(RuntimeError::UndefinedVariable)
 		}
 	    }
         }
@@ -270,7 +295,7 @@ impl ast::Visitor for Interpreter {
 		    let lox_type = LoxType::Nil;
 		    init_val = LoxValue{ lox_type };
 		}
-		self.environment.define(&ident.name, init_val);
+		self.environment.define(ident, init_val);
 		Ok(())
 	    }
 	}

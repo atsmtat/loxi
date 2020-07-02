@@ -26,6 +26,9 @@ impl Ident {
 }
 
 pub enum ExprKind {
+    // assignment
+    Assign(Ident, Box<Expr>),
+    
     // binary expr `left Op right`
     BinaryExpr(Box<Expr>, Token, Box<Expr>),
 
@@ -61,6 +64,9 @@ pub trait Visitor : Sized {
 
 pub fn walk_expr<V: Visitor>(visitor:&mut V, expr:&Expr) {
     match &expr.expr_kind {
+	ExprKind::Assign(_, expr) => {
+	    visitor.visit_expr(expr);
+	}
 	ExprKind::BinaryExpr(left, _, right) => {
 	    visitor.visit_expr(left);
 	    visitor.visit_expr(right);
@@ -114,6 +120,9 @@ impl<'ast> Visitor for AstPrinter<'ast> {
     fn visit_expr(&mut self, expr:&Expr) -> Self::ExprRet {
 	self.ast_print.push( '(' );
 	match &expr.expr_kind {
+	    ExprKind::Assign(ident, _) => {
+		write!(&mut self.ast_print, "assignment to '{}'", ident.name).unwrap();
+	    }
 	    ExprKind::BinaryExpr(_, tok, _) => {
 		write!(&mut self.ast_print, "{:?}", tok.token_type).unwrap();
 	    }
