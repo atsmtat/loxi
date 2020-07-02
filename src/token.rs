@@ -26,7 +26,7 @@ pub enum TokenType {
     LessEqual,
 
     // literals
-    Identifier{ ident: String },
+    Identifier(String),
     Str{ val: String },
     Number{ val: f64 },
 

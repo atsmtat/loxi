@@ -14,6 +14,17 @@ pub enum Lit {
     Str(String),
 }
 
+pub struct Ident {
+    pub name: String,
+    pub tok : Token,
+}
+
+impl Ident {
+    pub fn new(nm: &str, tok: Token) -> Ident {
+	Ident{ name: nm.to_string(), tok}
+    }
+}
+
 pub enum ExprKind {
     // binary expr `left Op right`
     BinaryExpr(Box<Expr>, Token, Box<Expr>),
@@ -26,7 +37,9 @@ pub enum ExprKind {
 
     // literal
     LitExpr(Lit),
-    
+
+    // variable
+    Variable(Ident),
 }
 
 pub struct Stmt {
@@ -36,6 +49,7 @@ pub struct Stmt {
 pub enum StmtKind {
     ExprStmt(Box<Expr>),
     PrintStmt(Box<Expr>),
+    VarStmt(Ident, Option<Box<Expr>>),
 }
 
 pub trait Visitor : Sized {
@@ -67,6 +81,11 @@ pub fn walk_stmt<V: Visitor>(visitor:&mut V, stmt:&Stmt) {
 	}
 	StmtKind::PrintStmt(ref expr) => {
 	    visitor.visit_expr(expr);
+	}
+	StmtKind::VarStmt(_, ref initializer) => {
+	    if let Some(expr) = initializer {
+		visitor.visit_expr(expr);
+	    }
 	}
     }
 }
@@ -105,6 +124,9 @@ impl<'ast> Visitor for AstPrinter<'ast> {
 	    ExprKind::LitExpr(lit) => {
 		write!(&mut self.ast_print, "{:?}", lit).unwrap();
 	    }
+	    ExprKind::Variable(ident) => {
+		write!(&mut self.ast_print, "{:?}", &ident.name).unwrap();
+	    }
 	}
 	walk_expr(self, expr);
 	self.ast_print.push(')');
@@ -115,6 +137,7 @@ impl<'ast> Visitor for AstPrinter<'ast> {
 	match stmt.stmt_kind {
 	    StmtKind::ExprStmt(_) => self.ast_print.push_str("expr stmt"),
 	    StmtKind::PrintStmt(_) => self.ast_print.push_str("print stmt"),
+	    StmtKind::VarStmt(_, _) => self.ast_print.push_str("variable stmt"),
 	}
 	walk_stmt(self, stmt);
 	self.ast_print.push(')');

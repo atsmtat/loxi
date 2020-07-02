@@ -1,8 +1,13 @@
-// program -> statement* EOF
+// program -> declaration* EOF
+// declaration -> var_decl
+//              | statement
+// var_decl -> 'var' IDENTIFIER ('=' expression)? ';'
+//
 // statement -> expr_stmt
 //            | print_stmt
 // expr_stmt -> expression ';'
 // print_stmt -> Print expression ';'
+//
 // expression -> equality
 // equality -> comparison (( '==' | '!=' ) comparison)*
 // comparison -> addition (( '>' | '>=' | '<' | '<=') addition)*
@@ -10,8 +15,9 @@
 // multiplication -> unary (('*' | '/') unary)*
 // unary -> ('!' | '-') unary
 //          | primary
-// primary -> literal | grouping
-// literal -> Str | Number | Nil | True | False
+//
+// primary -> literal | grouping | IDENTIFIER
+// literal -> STR | NUMBER | 'nil' | 'true' | 'false'
 // grouping -> '(' expression ')'
 
 use crate::token::TokenType;
@@ -48,10 +54,50 @@ impl<'a> Parser<'a> {
     fn program(&mut self) -> Result<Vec<Box<ast::Stmt>>, ParseError> {
 	let mut stmts = Vec::new();
 	while self.peek().token_type != TokenType::Eof {
-	    let stmt = self.statement()?;
+	    let stmt = self.declaration()?;
 	    stmts.push(stmt);
 	}
 	Ok(stmts)
+    }
+
+    fn declaration(&mut self) -> Result<Box<ast::Stmt>, ParseError> {
+	let tok = self.peek();
+	match &tok.token_type {
+	    TokenType::Var => {
+		// consume "var"
+		self.advance();
+		self.var_decl()
+	    }
+	    _ => self.statement(),
+	}
+    }
+
+    fn var_decl(&mut self) ->  Result<Box<ast::Stmt>, ParseError> {
+	let tok = self.peek();
+	let ident_name;
+	match &tok.token_type {
+	    TokenType::Identifier(ref name) => {
+		self.advance();
+		ident_name = name.to_string();
+	    },
+	    _ => {
+		self.report_error(&tok,  "mismatched token; expected identifier");
+		return Err(ParseError::MismatchedToken);
+	    }
+	}
+
+	let mut expr = None;
+	if self.peek().token_type == TokenType::Equal {
+	    // consume '='
+	    self.advance();
+	    let expr_res = self.expression()?;
+	    expr = Some(expr_res);
+	}
+
+	self.expect(TokenType::Semicolon)?;
+	let ident = ast::Ident::new( &ident_name, tok );
+	let stmt_kind = ast::StmtKind::VarStmt(ident, expr);
+	Ok(Box::new(ast::Stmt { stmt_kind }))
     }
 
     fn statement(&mut self) -> Result<Box<ast::Stmt>, ParseError> {
@@ -63,9 +109,8 @@ impl<'a> Parser<'a> {
 
 		self.print_stmt()
 	    }
-	    _ => {
-		self.expr_stmt()
-	    }
+	    _ => self.expr_stmt(),
+
 	}
     }
 
@@ -218,6 +263,12 @@ impl<'a> Parser<'a> {
 		let lit = ast::Lit::Boolean(false);
 		let expr_kind = ast::ExprKind::LitExpr(lit);
  		Ok(Box::new(ast::Expr{ expr_kind }))
+	    }
+	    TokenType::Identifier(ref name) => {
+		self.advance();
+		let expr_kind = ast::ExprKind::Variable(
+		    ast::Ident::new(name, tok.clone()) );
+		Ok(Box::new(ast::Expr { expr_kind }))
 	    }
 	    _ => {
 		let msg = format!( "unexpected token {:?}", tok.token_type);

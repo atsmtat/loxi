@@ -254,7 +254,7 @@ impl<'a> Scanner<'a> {
 	    "true" => True,
 	    "var" => Var,
 	    "while" => While,
-	    _ => Identifier{ ident }
+	    _ => Identifier(ident)
 	}
     }
 

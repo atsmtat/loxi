@@ -1,8 +1,9 @@
+use std::collections::HashMap;
 use crate::ast;
 use crate::ast::{Expr, ExprKind, Stmt, StmtKind, Lit, Visitor};
 use crate::token::{TokenType, Token};
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub enum LoxType {
     Nil,
     Boolean(bool),
@@ -10,7 +11,7 @@ pub enum LoxType {
     Str(String),
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct LoxValue {
     lox_type: LoxType,
 }
@@ -36,15 +37,35 @@ impl LoxValue {
 pub enum RuntimeError {
     InvalidOperator,
     InvalidOperand,
+    UndefinedVariable,
+}
+
+pub struct Environment {
+    pub values: HashMap<String, LoxValue>,
+}
+
+impl Environment {
+    pub fn new() -> Environment {
+	Environment{ values : HashMap::new() }
+    }
+
+    pub fn define(&mut self, name:&str, value:LoxValue) {
+	self.values.insert(name.to_string(), value);
+    }
+
+    pub fn get(&self, name:&str) -> Option<&LoxValue> {
+	self.values.get(name)
+    }
 }
 
 pub struct Interpreter {
     pub has_error: bool,
+    environment: Environment,
 }
 
 impl Interpreter {
     pub fn new() -> Interpreter {
-	Interpreter{ has_error: false }
+	Interpreter{ has_error: false, environment: Environment::new(), }
     }
 
     pub fn run(&mut self, stmts:& Vec<Box<Stmt>>) {
@@ -74,6 +95,10 @@ impl Interpreter {
             self.report_error(tok, "invalid operand; must be a number");
             Err(RuntimeError::InvalidOperand)
         }
+    }
+
+    fn evaluate(&mut self, expr:&Expr) -> Result<LoxValue, RuntimeError> {
+	self.visit_expr( expr )
     }
 
     fn eval_binary_op(
@@ -208,6 +233,18 @@ impl ast::Visitor for Interpreter {
                 let right_val = self.visit_expr(rexpr)?;
                 self.eval_binary_op(&left_val, &right_val, &tok)
             }
+
+	    ExprKind::Variable(ref ident) => {
+		let val = self.environment.get(&ident.name);
+		match val {
+		    Some(v) => Ok((*v).clone()),
+		    None => {
+			let err_msg = format!( "undefined variable '{}'", ident.name);
+			self.report_error(&ident.tok, &err_msg);
+			Err(RuntimeError::UndefinedVariable)
+		    }
+		}
+	    }
         }
     }
 
@@ -217,9 +254,23 @@ impl ast::Visitor for Interpreter {
 		self.visit_expr(expr)?;
 		Ok(())
 	    }
+
 	    StmtKind::PrintStmt(ref expr) => {
 		let val = self.visit_expr(expr)?;
 		println!("{:?}", val);
+		Ok(())
+	    }
+
+	    StmtKind::VarStmt(ref ident, ref initializer) => {
+		let init_val;
+		if let Some(ref init_expr) = initializer {
+		    let val = self.evaluate(init_expr)?;
+		    init_val = val;
+		} else {
+		    let lox_type = LoxType::Nil;
+		    init_val = LoxValue{ lox_type };
+		}
+		self.environment.define(&ident.name, init_val);
 		Ok(())
 	    }
 	}
