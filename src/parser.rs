@@ -5,8 +5,10 @@
 //
 // statement -> expr_stmt
 //            | print_stmt
+//            | block
 // expr_stmt -> expression ';'
 // print_stmt -> Print expression ';'
+// block -> '{' declaration* '}'
 //
 // expression -> assignment
 // assignment -> IDENTIFIER '=' assignment
@@ -112,6 +114,11 @@ impl<'a> Parser<'a> {
 
 		self.print_stmt()
 	    }
+	    TokenType::LeftBrace => {
+		// consume '{'
+		self.advance();
+		self.block()
+	    }
 	    _ => self.expr_stmt(),
 
 	}
@@ -129,6 +136,31 @@ impl<'a> Parser<'a> {
 	self.expect(TokenType::Semicolon)?;
 	let stmt_kind = ast::StmtKind::PrintStmt(expr);
 	Ok(Box::new(ast::Stmt { stmt_kind }))
+    }
+
+    fn block(&mut self) -> Result<Box<ast::Stmt>, ParseError> {
+	let mut stmts = Vec::new();
+	loop {
+	    let tok = self.peek();
+	    match tok.token_type {
+		TokenType::RightBrace => {
+		    // consume '}'
+		    self.advance();
+		    // end of block
+		    break;
+		}
+		TokenType::Eof => {
+		    self.report_error(&tok, "Expecting end of block '}'");
+		    return Err(ParseError::UnexpectedToken);
+		}
+		_ => {
+		    let stmt = self.declaration()?;
+		    stmts.push(stmt);
+		}
+	    }
+	}
+	let stmt_kind = ast::StmtKind::BlockStmt(stmts);
+	return Ok(Box::new(ast::Stmt { stmt_kind } ));
     }
 
     fn expression(&mut self) -> Result<Box<ast::Expr>, ParseError> {

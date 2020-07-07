@@ -53,6 +53,7 @@ pub enum StmtKind {
     ExprStmt(Box<Expr>),
     PrintStmt(Box<Expr>),
     VarStmt(Ident, Option<Box<Expr>>),
+    BlockStmt(Vec<Box<Stmt>>),
 }
 
 pub trait Visitor : Sized {
@@ -91,6 +92,11 @@ pub fn walk_stmt<V: Visitor>(visitor:&mut V, stmt:&Stmt) {
 	StmtKind::VarStmt(_, ref initializer) => {
 	    if let Some(expr) = initializer {
 		visitor.visit_expr(expr);
+	    }
+	}
+	StmtKind::BlockStmt(ref stmts) => {
+	    for stmt in stmts {
+		visitor.visit_stmt(stmt);
 	    }
 	}
     }
@@ -147,6 +153,7 @@ impl<'ast> Visitor for AstPrinter<'ast> {
 	    StmtKind::ExprStmt(_) => self.ast_print.push_str("expr stmt"),
 	    StmtKind::PrintStmt(_) => self.ast_print.push_str("print stmt"),
 	    StmtKind::VarStmt(_, _) => self.ast_print.push_str("variable stmt"),
+	    StmtKind::BlockStmt(_) => self.ast_print.push_str("block stmt"),
 	}
 	walk_stmt(self, stmt);
 	self.ast_print.push(')');

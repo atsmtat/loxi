@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::collections::LinkedList;
 use crate::ast;
 use crate::ast::{Expr, ExprKind, Stmt, StmtKind, Lit, Ident, Visitor};
 use crate::token::{TokenType, Token};
@@ -61,9 +62,9 @@ impl Environment {
 	}
     }
 
-    pub fn assign(&mut self, ident:&Ident, value:LoxValue) -> bool {
+    pub fn assign(&mut self, ident:&Ident, value:&LoxValue) -> bool {
 	if self.values.contains_key(&ident.name) {
-	    self.values.insert(ident.name.clone(), value);
+	    self.values.insert(ident.name.clone(), value.clone());
 	    true
 	} else {
 	    false
@@ -73,15 +74,17 @@ impl Environment {
 
 pub struct Interpreter {
     pub has_error: bool,
-    environment: Environment,
+    environments: LinkedList<Environment>,
 }
 
 impl Interpreter {
     pub fn new() -> Interpreter {
-	Interpreter{ has_error: false, environment: Environment::new(), }
+	Interpreter{ has_error: false, environments: LinkedList::new(), }
     }
 
     pub fn run(&mut self, stmts:& Vec<Box<Stmt>>) {
+	// create global environment
+	self.push_environment();
 	for stmt in stmts {
 	    let res = self.visit_stmt( stmt );
 	    match res {
@@ -89,6 +92,46 @@ impl Interpreter {
 		Ok(_) => {}
 	    }
 	}
+    }
+
+    fn push_environment(&mut self) {
+	self.environments.push_front(Environment::new());
+    }
+
+    fn pop_environment(&mut self) {
+	self.environments.pop_front();
+    }
+
+    pub fn define(&mut self, ident:&Ident, value:LoxValue) {
+	if let Some(curr_env) = self.environments.front_mut() {
+	    curr_env.define(ident, value);
+	} else {
+	    panic!("environment missing");
+	}
+    }
+
+    pub fn get(&mut self, ident:&Ident) -> Result<LoxValue, RuntimeError> {
+	// search for identifier, starting from inner most environment,
+	// following up the chain of enclosing environments
+	for env in self.environments.iter() {
+	    if let Some(val) = env.get(ident) {
+		return Ok(val);
+	    }
+	}
+	let err_msg = format!( "undefined variable '{}'", &ident.name);
+	self.report_error(&ident.tok, &err_msg);
+	return Err(RuntimeError::UndefinedVariable);
+    }
+
+    pub fn assign(&mut self, ident:&Ident, value:&LoxValue) -> Result<(), RuntimeError> {
+	for env in self.environments.iter_mut() {
+	    if env.assign(ident, value) {
+		return Ok(());
+	    }
+	}
+	let err_msg = format!( "undefined variable '{}'", &ident.name);
+	self.report_error(&ident.tok, &err_msg);
+	return Err(RuntimeError::UndefinedVariable);
     }
 
     fn report_error(&mut self, tok: &Token, msg: &str) {
@@ -112,6 +155,25 @@ impl Interpreter {
 
     fn evaluate(&mut self, expr:&Expr) -> Result<LoxValue, RuntimeError> {
 	self.visit_expr( expr )
+    }
+
+    fn execute(&mut self, stmt:&Stmt) -> Result<(), RuntimeError> {
+	self.visit_stmt( stmt )
+    }
+
+    fn execute_block(&mut self, stmts:&Vec<Box<Stmt>>) -> Result<(), RuntimeError> {
+	self.push_environment();
+	let mut result = Ok(());
+
+	for stmt in stmts {
+	    result = self.execute(stmt);
+	    match result {
+		Err(_) => break,
+		Ok(_) => {}
+	    }
+	}
+	self.pop_environment();
+	result
     }
 
     fn eval_binary_op(
@@ -248,27 +310,13 @@ impl ast::Visitor for Interpreter {
             }
 
 	    ExprKind::Variable(ref ident) => {
-		let val = self.environment.get(ident);
-		match val {
-		    None => {
-			let err_msg = format!( "undefined variable '{}'", &ident.name);
-			self.report_error(&ident.tok, &err_msg);
-			Err(RuntimeError::UndefinedVariable)
-		    }
-		    Some(v) => Ok(v),
-		}
+		self.get(ident)
 	    }
 
 	    ExprKind::Assign(ref ident, ref expr) => {
 		let rval = self.evaluate(expr)?;
-		let ret_copy = rval.clone();
-		if self.environment.assign(ident, rval) {
-		    Ok(ret_copy)
-		} else {
-		    let err_msg = format!( "undefined variable '{}'", &ident.name);
-		    self.report_error(&ident.tok, &err_msg);
-		    Err(RuntimeError::UndefinedVariable)
-		}
+		self.assign(ident, &rval)?;
+		Ok(rval)
 	    }
         }
     }
@@ -295,8 +343,12 @@ impl ast::Visitor for Interpreter {
 		    let lox_type = LoxType::Nil;
 		    init_val = LoxValue{ lox_type };
 		}
-		self.environment.define(ident, init_val);
+		self.define(ident, init_val);
 		Ok(())
+	    }
+
+	    StmtKind::BlockStmt(ref stmts) => {
+		self.execute_block(stmts)
 	    }
 	}
     }
