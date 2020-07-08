@@ -309,6 +309,24 @@ impl ast::Visitor for Interpreter {
                 self.eval_binary_op(&left_val, &right_val, &tok)
             }
 
+	    ExprKind::LogicalExpr(ref lexpr, ref tok, ref rexpr) => {
+                let left_val = self.visit_expr(lexpr)?;
+		match &tok.token_type {
+		    TokenType::Or => {
+			if left_val.truth_value() {
+			    return Ok(left_val);
+			}
+		    }
+		    TokenType::And => {
+			if !left_val.truth_value() {
+			    return Ok(left_val);
+			}
+		    }
+		    _ => { panic!( "unexpected logical operand {:?}", tok); }
+		}
+		self.visit_expr(rexpr)
+            }
+
 	    ExprKind::Variable(ref ident) => {
 		self.get(ident)
 	    }
@@ -344,6 +362,16 @@ impl ast::Visitor for Interpreter {
 		    init_val = LoxValue{ lox_type };
 		}
 		self.define(ident, init_val);
+		Ok(())
+	    }
+
+	    StmtKind::IfStmt(ref expr, ref then_stmt, ref else_stmt) => {
+		let val = self.evaluate(expr)?;
+		if val.truth_value() {
+		    self.execute(then_stmt)?;
+		} else if let Some(es) = else_stmt {
+		    self.execute(es)?;
+		}
 		Ok(())
 	    }
 

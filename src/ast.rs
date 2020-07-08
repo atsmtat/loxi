@@ -32,6 +32,9 @@ pub enum ExprKind {
     // binary expr `left Op right`
     BinaryExpr(Box<Expr>, Token, Box<Expr>),
 
+    // logical expr `left and/or right`
+    LogicalExpr(Box<Expr>, Token, Box<Expr>),
+
     // parenthesized expr `( exrp )`
     ParenExpr(Box<Expr>),
 
@@ -54,6 +57,9 @@ pub enum StmtKind {
     PrintStmt(Box<Expr>),
     VarStmt(Ident, Option<Box<Expr>>),
     BlockStmt(Vec<Box<Stmt>>),
+
+    // if expr, then statement, optional else statement
+    IfStmt(Box<Expr>, Box<Stmt>, Option<Box<Stmt>>),
 }
 
 pub trait Visitor : Sized {
@@ -72,7 +78,10 @@ pub fn walk_expr<V: Visitor>(visitor:&mut V, expr:&Expr) {
 	    visitor.visit_expr(left);
 	    visitor.visit_expr(right);
 	}
-
+	ExprKind::LogicalExpr(left, _, right) => {
+	    visitor.visit_expr(left);
+	    visitor.visit_expr(right);
+	}
 	ExprKind::ParenExpr(e) |
 	ExprKind::UnaryExpr(_, e) => {
 	    visitor.visit_expr(e);
@@ -99,6 +108,7 @@ pub fn walk_stmt<V: Visitor>(visitor:&mut V, stmt:&Stmt) {
 		visitor.visit_stmt(stmt);
 	    }
 	}
+	_ => {}
     }
 }
 
@@ -132,6 +142,9 @@ impl<'ast> Visitor for AstPrinter<'ast> {
 	    ExprKind::BinaryExpr(_, tok, _) => {
 		write!(&mut self.ast_print, "{:?}", tok.token_type).unwrap();
 	    }
+	    ExprKind::LogicalExpr(_, tok, _) => {
+		write!(&mut self.ast_print, "{:?}", tok.token_type).unwrap();
+	    }
 	    ExprKind::ParenExpr(_) => self.ast_print.push_str("paren"),
 	    ExprKind::UnaryExpr(tok, _) => {
 		write!(&mut self.ast_print, "{:?}", tok.token_type).unwrap();
@@ -154,6 +167,7 @@ impl<'ast> Visitor for AstPrinter<'ast> {
 	    StmtKind::PrintStmt(_) => self.ast_print.push_str("print stmt"),
 	    StmtKind::VarStmt(_, _) => self.ast_print.push_str("variable stmt"),
 	    StmtKind::BlockStmt(_) => self.ast_print.push_str("block stmt"),
+	    StmtKind::IfStmt(_,_,_) => self.ast_print.push_str("if stmt"),
 	}
 	walk_stmt(self, stmt);
 	self.ast_print.push(')');

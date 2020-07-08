@@ -5,14 +5,20 @@
 //
 // statement -> expr_stmt
 //            | print_stmt
+//            | if_stmt
 //            | block
+//
 // expr_stmt -> expression ';'
 // print_stmt -> Print expression ';'
+// if_stmt -> 'if' '(' expression ')' statement ('else' statement)?
 // block -> '{' declaration* '}'
 //
 // expression -> assignment
 // assignment -> IDENTIFIER '=' assignment
-//             | equality
+//             | logic_or
+//
+// logic_or -> logic_and ('or' logic_and)*
+// logic_and -> equality ('and' equality)*
 // equality -> comparison (( '==' | '!=' ) comparison)*
 // comparison -> addition (( '>' | '>=' | '<' | '<=') addition)*
 // addition -> multiplication (('+' | '-' ) multiplication)*
@@ -119,6 +125,11 @@ impl<'a> Parser<'a> {
 		self.advance();
 		self.block()
 	    }
+	    TokenType::If => {
+		// consume 'if'
+		self.advance();
+		self.if_stmt()
+	    }
 	    _ => self.expr_stmt(),
 
 	}
@@ -136,6 +147,22 @@ impl<'a> Parser<'a> {
 	self.expect(TokenType::Semicolon)?;
 	let stmt_kind = ast::StmtKind::PrintStmt(expr);
 	Ok(Box::new(ast::Stmt { stmt_kind }))
+    }
+
+    fn if_stmt(&mut self) -> Result<Box<ast::Stmt>, ParseError> {
+	self.expect(TokenType::LeftParen)?;
+	let if_expr = self.expression()?;
+	self.expect(TokenType::RightParen)?;
+	let then_stmt = self.statement()?;
+
+	let mut else_stmt = None;
+	if self.peek().token_type == TokenType::Else {
+	    // consume "else"
+	    self.advance();
+	    else_stmt = Some(self.statement()?);
+	}
+	let stmt_kind = ast::StmtKind::IfStmt(if_expr, then_stmt, else_stmt);
+	Ok(Box::new(ast::Stmt { stmt_kind } ))
     }
 
     fn block(&mut self) -> Result<Box<ast::Stmt>, ParseError> {
@@ -171,7 +198,7 @@ impl<'a> Parser<'a> {
 	// Parse assignment target as if it's an expression, as target
 	// could have a complex syntax which is already captured by expression,
 	// Later, we'll check if it's a valid target.
-	let expr = self.equality()?;
+	let expr = self.logical_or()?;
 	match self.peek().token_type {
 	    TokenType::Equal => {
 		// consume '='
@@ -191,6 +218,42 @@ impl<'a> Parser<'a> {
 	    }
 	    _ => Ok(expr),
 	}
+    }
+
+    fn logical_or(&mut self) -> Result<Box<ast::Expr>, ParseError> {
+	let mut expr = self.logical_and()?;
+
+	loop {
+	    let tok = self.peek();
+	    match &tok.token_type {
+		TokenType::Or => {
+		    self.advance();
+		    let rhs = self.logical_and()?;
+		    let expr_kind = ast::ExprKind::LogicalExpr(expr, tok, rhs);
+		    expr = Box::new(ast::Expr{expr_kind});
+		}
+		_ => break,
+	    }
+	}
+	Ok(expr)
+    }
+
+    fn logical_and(&mut self) -> Result<Box<ast::Expr>, ParseError> {
+	let mut expr = self.equality()?;
+
+	loop {
+	    let tok = self.peek();
+	    match &tok.token_type {
+		TokenType::And => {
+		    self.advance();
+		    let rhs = self.equality()?;
+		    let expr_kind = ast::ExprKind::LogicalExpr(expr, tok, rhs);
+		    expr = Box::new(ast::Expr{expr_kind});
+		}
+		_ => break,
+	    }
+	}
+	Ok(expr)
     }
 
     fn equality(&mut self) -> Result<Box<ast::Expr>, ParseError> {
