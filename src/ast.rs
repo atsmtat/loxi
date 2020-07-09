@@ -60,6 +60,9 @@ pub enum StmtKind {
 
     // if expr, then statement, optional else statement
     IfStmt(Box<Expr>, Box<Stmt>, Option<Box<Stmt>>),
+
+    // while condition, body
+    WhileStmt(Box<Expr>, Box<Stmt>),
 }
 
 pub trait Visitor : Sized {
@@ -168,6 +171,7 @@ impl<'ast> Visitor for AstPrinter<'ast> {
 	    StmtKind::VarStmt(_, _) => self.ast_print.push_str("variable stmt"),
 	    StmtKind::BlockStmt(_) => self.ast_print.push_str("block stmt"),
 	    StmtKind::IfStmt(_,_,_) => self.ast_print.push_str("if stmt"),
+	    StmtKind::WhileStmt(_,_) => self.ast_print.push_str("while stmt"),
 	}
 	walk_stmt(self, stmt);
 	self.ast_print.push(')');

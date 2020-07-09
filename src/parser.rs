@@ -6,11 +6,17 @@
 // statement -> expr_stmt
 //            | print_stmt
 //            | if_stmt
+//            | while_stmt
+//            | for_stmt
 //            | block
 //
 // expr_stmt -> expression ';'
 // print_stmt -> Print expression ';'
 // if_stmt -> 'if' '(' expression ')' statement ('else' statement)?
+// while_stmt -> 'while' '(' expression ')' statement
+// for_stmt -> 'for' '(' (var_decl | expr_stmt | ';')
+//                    expression? ';'
+//                    expression? ')' statement
 // block -> '{' declaration* '}'
 //
 // expression -> assignment
@@ -130,6 +136,16 @@ impl<'a> Parser<'a> {
 		self.advance();
 		self.if_stmt()
 	    }
+	    TokenType::While => {
+		// consume 'while'
+		self.advance();
+		self.while_stmt()
+	    }
+	    TokenType::For => {
+		// consume 'for'
+		self.advance();
+		self.for_stmt()
+	    }
 	    _ => self.expr_stmt(),
 
 	}
@@ -163,6 +179,67 @@ impl<'a> Parser<'a> {
 	}
 	let stmt_kind = ast::StmtKind::IfStmt(if_expr, then_stmt, else_stmt);
 	Ok(Box::new(ast::Stmt { stmt_kind } ))
+    }
+
+    fn while_stmt(&mut self) -> Result<Box<ast::Stmt>, ParseError> {
+	self.expect(TokenType::LeftParen)?;
+	let expr = self.expression()?;
+	self.expect(TokenType::RightParen)?;
+	let stmt = self.statement()?;
+
+	let stmt_kind = ast::StmtKind::WhileStmt(expr, stmt);
+	Ok(Box::new(ast::Stmt { stmt_kind } ))
+    }
+
+    fn for_stmt(&mut self) -> Result<Box<ast::Stmt>, ParseError> {
+	self.expect(TokenType::LeftParen)?;
+
+	let mut initializer = None;
+	match self.peek().token_type {
+	    TokenType::Semicolon => { self.advance(); }
+	    TokenType::Var => {
+		// consume "var"
+		self.advance();
+		initializer = Some(self.var_decl()?);
+	    }
+	    _ => {
+		initializer = Some(self.expr_stmt()?);
+	    }
+	}
+
+	let condition;
+	if self.peek().token_type != TokenType::Semicolon {
+	    condition = self.expression()?;
+	} else {
+	    let expr_kind = ast::ExprKind::LitExpr(ast::Lit::Boolean(true));
+	    condition = Box::new(ast::Expr { expr_kind } );
+	}
+	self.expect(TokenType::Semicolon)?;
+
+	let mut increment = None;
+	if self.peek().token_type != TokenType::RightParen {
+	    let expr = self.expression()?;
+	    let stmt_kind = ast::StmtKind::ExprStmt(expr);
+	    increment = Some(Box::new(ast::Stmt{ stmt_kind }));
+	}
+	self.expect(TokenType::RightParen)?;
+
+	let mut body = self.statement()?;
+
+	if let Some(increment) = increment {
+	    let stmt_kind = ast::StmtKind::BlockStmt( vec![ body, increment ] );
+	    body = Box::new(ast::Stmt { stmt_kind } );
+	}
+
+	let stmt_kind = ast::StmtKind::WhileStmt(condition, body);
+	body = Box::new(ast::Stmt { stmt_kind } );
+
+	if let Some(initializer) = initializer {
+	    let stmt_kind = ast::StmtKind::BlockStmt( vec![ initializer, body ] );
+	    body = Box::new(ast::Stmt { stmt_kind } );
+	}
+
+	Ok(body)
     }
 
     fn block(&mut self) -> Result<Box<ast::Stmt>, ParseError> {

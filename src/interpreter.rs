@@ -375,6 +375,13 @@ impl ast::Visitor for Interpreter {
 		Ok(())
 	    }
 
+	    StmtKind::WhileStmt(ref condition, ref body) => {
+		while self.evaluate(condition)?.truth_value() {
+		    self.execute(body)?;
+		}
+		Ok(())
+	    }
+
 	    StmtKind::BlockStmt(ref stmts) => {
 		self.execute_block(stmts)
 	    }
