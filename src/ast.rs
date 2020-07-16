@@ -46,6 +46,9 @@ pub enum ExprKind {
 
     // variable
     Variable(Ident),
+
+    // callee, closed paren token, args
+    CallExpr(Box<Expr>, Token, Vec<Box<Expr>>),
 }
 
 pub struct Stmt {
@@ -63,6 +66,9 @@ pub enum StmtKind {
 
     // while condition, body
     WhileStmt(Box<Expr>, Box<Stmt>),
+
+    // function name, params, body
+    FunStmt(Ident, Vec<Ident>, Vec<Box<Stmt>>),
 }
 
 pub trait Visitor : Sized {
@@ -88,6 +94,12 @@ pub fn walk_expr<V: Visitor>(visitor:&mut V, expr:&Expr) {
 	ExprKind::ParenExpr(e) |
 	ExprKind::UnaryExpr(_, e) => {
 	    visitor.visit_expr(e);
+	}
+	ExprKind::CallExpr(ref callee, _, ref args) => {
+	    visitor.visit_expr(callee);
+	    for arg in args {
+		visitor.visit_expr(arg);
+	    }
 	}
 	_ => {}
     }
@@ -158,6 +170,7 @@ impl<'ast> Visitor for AstPrinter<'ast> {
 	    ExprKind::Variable(ident) => {
 		write!(&mut self.ast_print, "{:?}", &ident.name).unwrap();
 	    }
+	    ExprKind::CallExpr(_,_,_) => { self.ast_print.push_str("call expr"); }
 	}
 	walk_expr(self, expr);
 	self.ast_print.push(')');
@@ -172,6 +185,7 @@ impl<'ast> Visitor for AstPrinter<'ast> {
 	    StmtKind::BlockStmt(_) => self.ast_print.push_str("block stmt"),
 	    StmtKind::IfStmt(_,_,_) => self.ast_print.push_str("if stmt"),
 	    StmtKind::WhileStmt(_,_) => self.ast_print.push_str("while stmt"),
+	    StmtKind::FunStmt(_,_,_) => self.ast_print.push_str("function stmt"),
 	}
 	walk_stmt(self, stmt);
 	self.ast_print.push(')');

@@ -1,7 +1,12 @@
 // program -> declaration* EOF
-// declaration -> var_decl
+// declaration -> fun_decl
+//              | var_decl
 //              | statement
 // var_decl -> 'var' IDENTIFIER ('=' expression)? ';'
+//
+// fun_decl -> 'fun' function
+// function -> IDENTIFIER '(' parameters? ')' block
+// parameters -> IDENTIFIER (',' IDENTIFIER)*
 //
 // statement -> expr_stmt
 //            | print_stmt
@@ -30,8 +35,10 @@
 // addition -> multiplication (('+' | '-' ) multiplication)*
 // multiplication -> unary (('*' | '/') unary)*
 // unary -> ('!' | '-') unary
-//          | primary
+//          | call
 //
+// call -> primary ( '(' arguments? ')' )*
+// arguments -> expression ( ',' expression )*
 // primary -> literal | grouping | IDENTIFIER
 // literal -> STR | NUMBER | 'nil' | 'true' | 'false'
 // grouping -> '(' expression ')'
@@ -85,23 +92,31 @@ impl<'a> Parser<'a> {
 		self.advance();
 		self.var_decl()
 	    }
+	    TokenType::Fun => {
+		// consume "fun"
+		self.advance();
+		self.function()
+	    }
 	    _ => self.statement(),
 	}
     }
 
-    fn var_decl(&mut self) ->  Result<Box<ast::Stmt>, ParseError> {
+    fn ident(&mut self) ->   Result<ast::Ident, ParseError> {
 	let tok = self.peek();
-	let ident_name;
 	match &tok.token_type {
 	    TokenType::Identifier(ref name) => {
 		self.advance();
-		ident_name = name.to_string();
+		Ok(ast::Ident::new(name, tok))
 	    },
 	    _ => {
 		self.report_error(&tok,  "mismatched token; expected identifier");
-		return Err(ParseError::MismatchedToken);
+		Err(ParseError::MismatchedToken)
 	    }
 	}
+    }
+
+    fn var_decl(&mut self) ->  Result<Box<ast::Stmt>, ParseError> {
+	let var_name = self.ident();
 
 	let mut expr = None;
 	if self.peek().token_type == TokenType::Equal {
@@ -112,9 +127,40 @@ impl<'a> Parser<'a> {
 	}
 
 	self.expect(TokenType::Semicolon)?;
-	let ident = ast::Ident::new( &ident_name, tok );
-	let stmt_kind = ast::StmtKind::VarStmt(ident, expr);
+	let stmt_kind = ast::StmtKind::VarStmt(var_name, expr);
 	Ok(Box::new(ast::Stmt { stmt_kind }))
+    }
+
+    fn function(&mut self) -> Result<Box<ast::Stmt>, ParseError> {
+	let fun_name = self.ident();
+	self.expect(TokenType::LeftParen)?;
+
+	let mut params = vec![];
+	if let self.peek().token_type != TokenType::RightParen {
+	    params = self.parameters()?;
+	}
+
+	self.expect(TokenType::RightParen)?;
+	self.expect(TokenType::LeftBrace)?;
+
+	let stmts = self.block_stmts()?;
+	let stmt_kind = ast::StmtKind::FunStmt(fun_name, params, stmts);
+	Ok(Box::new(ast::Stmt { stmt_kind }))
+    }
+
+    fn parameters(&mut self) -> Result<Vec<ast::Ident>, ParseError> {
+	let params = vec![ self.ident()? ];
+	while self.peek().token_type == TokenType::Comma {
+	    if params.len() >= 255 {
+		let tok = self.peek();
+		self.report_error(&tok, "cannot have more than 255 parameters");
+	    }
+
+	    // consume ','
+	    self.advance();
+	    params.push( self.ident()? );
+	}
+	Ok(params)
     }
 
     fn statement(&mut self) -> Result<Box<ast::Stmt>, ParseError> {
@@ -243,6 +289,12 @@ impl<'a> Parser<'a> {
     }
 
     fn block(&mut self) -> Result<Box<ast::Stmt>, ParseError> {
+	let stmts = self.block_stmts()?;
+	let stmt_kind = ast::StmtKind::BlockStmt(stmts);
+	Ok(Box::new(ast::Stmt { stmt_kind } ))
+    }
+
+    fn block_stmts(&mut self) -> Result<Vec<Box<ast::Stmt>>, ParseError> {
 	let mut stmts = Vec::new();
 	loop {
 	    let tok = self.peek();
@@ -263,8 +315,7 @@ impl<'a> Parser<'a> {
 		}
 	    }
 	}
-	let stmt_kind = ast::StmtKind::BlockStmt(stmts);
-	return Ok(Box::new(ast::Stmt { stmt_kind } ));
+	Ok(stmts)
     }
 
     fn expression(&mut self) -> Result<Box<ast::Expr>, ParseError> {
@@ -421,8 +472,42 @@ impl<'a> Parser<'a> {
 		let expr_kind = ast::ExprKind::UnaryExpr(tok, rhs);
 		Ok(Box::new(ast::Expr{ expr_kind }))
 	    }
-	    _ => self.primary()
+	    _ => self.call()
 	}
+    }
+
+    fn call(&mut self) ->  Result<Box<ast::Expr>, ParseError> {
+	let mut expr = self.primary()?;
+
+	while self.peek().token_type == TokenType::LeftParen {
+	    // consume '('
+	    self.advance();
+
+	    let mut args = vec![];
+	    if let self.peek().token_type != TokenType::RightParen {
+		args = self.arguments()?;
+	    }
+	    let close_paren = self.peek();
+	    self.expect(TokenType::RightParen)?;
+	    let expr_kind = ast::ExprKind::CallExpr(expr, close_paren, args);
+	    expr = Box::new(ast::Expr{ expr_kind });
+	}
+	Ok(expr)
+    }
+
+    fn arguments(&mut self) -> Result<Vec<Box<ast::Expr>>, ParseError> {
+	let args = vec![ self.expression()? ];
+	while self.peek().token_type == TokenType::Comma {
+	    if args.len() >= 255 {
+		let tok = self.peek();
+		self.report_error(&tok, "cannot have more than 255 arguments");
+	    }
+
+	    // consume ','
+	    self.advance();
+	    args.push( self.expression()? );
+	}
+	Ok(args)
     }
 
     fn primary(&mut self) -> Result<Box<ast::Expr>, ParseError> {
