@@ -1,8 +1,8 @@
-pub mod scanner;
-pub mod token;
-pub mod ast;
-pub mod parser;
-pub mod interpreter;
+mod scanner;
+mod token;
+mod ast;
+mod parser;
+mod interpreter;
 
 use std::fs;
 use std::io;

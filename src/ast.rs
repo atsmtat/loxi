@@ -1,7 +1,9 @@
 use crate::token::Token;
 use std::marker::Sized;
 use std::fmt::Write;
+use std::rc::Rc;
 
+#[derive(Debug)]
 pub struct Expr {
     pub expr_kind : ExprKind,
 }
@@ -14,6 +16,7 @@ pub enum Lit {
     Str(String),
 }
 
+#[derive(Debug)]
 pub struct Ident {
     pub name: String,
     pub tok : Token,
@@ -25,6 +28,7 @@ impl Ident {
     }
 }
 
+#[derive(Debug)]
 pub enum ExprKind {
     // assignment
     Assign(Ident, Box<Expr>),
@@ -51,10 +55,12 @@ pub enum ExprKind {
     CallExpr(Box<Expr>, Token, Vec<Box<Expr>>),
 }
 
+#[derive(Debug)]
 pub struct Stmt {
     pub stmt_kind : StmtKind,
 }
 
+#[derive(Debug)]
 pub enum StmtKind {
     ExprStmt(Box<Expr>),
     PrintStmt(Box<Expr>),
@@ -68,7 +74,16 @@ pub enum StmtKind {
     WhileStmt(Box<Expr>, Box<Stmt>),
 
     // function name, params, body
-    FunStmt(Ident, Vec<Ident>, Vec<Box<Stmt>>),
+    FunStmt(Rc<FunDef>),
+
+    RetStmt(Token, Option<Box<Expr>>),
+}
+
+#[derive(Debug)]
+pub struct FunDef {
+    pub name : Ident,
+    pub params : Vec<Ident>,
+    pub body : Vec<Box<Stmt>>,
 }
 
 pub trait Visitor : Sized {
@@ -185,7 +200,8 @@ impl<'ast> Visitor for AstPrinter<'ast> {
 	    StmtKind::BlockStmt(_) => self.ast_print.push_str("block stmt"),
 	    StmtKind::IfStmt(_,_,_) => self.ast_print.push_str("if stmt"),
 	    StmtKind::WhileStmt(_,_) => self.ast_print.push_str("while stmt"),
-	    StmtKind::FunStmt(_,_,_) => self.ast_print.push_str("function stmt"),
+	    StmtKind::FunStmt(..) => self.ast_print.push_str("function stmt"),
+	    StmtKind::RetStmt(..) => self.ast_print.push_str("return stmt"),
 	}
 	walk_stmt(self, stmt);
 	self.ast_print.push(')');

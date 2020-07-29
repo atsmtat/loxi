@@ -10,6 +10,7 @@
 //
 // statement -> expr_stmt
 //            | print_stmt
+//            | return_stmt
 //            | if_stmt
 //            | while_stmt
 //            | for_stmt
@@ -17,6 +18,7 @@
 //
 // expr_stmt -> expression ';'
 // print_stmt -> Print expression ';'
+// return_stmt -> Return expression? ';'
 // if_stmt -> 'if' '(' expression ')' statement ('else' statement)?
 // while_stmt -> 'while' '(' expression ')' statement
 // for_stmt -> 'for' '(' (var_decl | expr_stmt | ';')
@@ -47,6 +49,7 @@ use crate::token::TokenType;
 use crate::token::Token;
 use crate::ast;
 use std::slice;
+use std::rc::Rc;
 
 pub struct Parser<'a> {
     pub tokens: slice::Iter<'a, Token>,
@@ -103,10 +106,10 @@ impl<'a> Parser<'a> {
 
     fn ident(&mut self) ->   Result<ast::Ident, ParseError> {
 	let tok = self.peek();
-	match &tok.token_type {
+	match tok.token_type {
 	    TokenType::Identifier(ref name) => {
 		self.advance();
-		Ok(ast::Ident::new(name, tok))
+		Ok(ast::Ident::new(name, tok.clone()))
 	    },
 	    _ => {
 		self.report_error(&tok,  "mismatched token; expected identifier");
@@ -116,7 +119,7 @@ impl<'a> Parser<'a> {
     }
 
     fn var_decl(&mut self) ->  Result<Box<ast::Stmt>, ParseError> {
-	let var_name = self.ident();
+	let var_name = self.ident()?;
 
 	let mut expr = None;
 	if self.peek().token_type == TokenType::Equal {
@@ -132,24 +135,25 @@ impl<'a> Parser<'a> {
     }
 
     fn function(&mut self) -> Result<Box<ast::Stmt>, ParseError> {
-	let fun_name = self.ident();
+	let name = self.ident()?;
 	self.expect(TokenType::LeftParen)?;
 
 	let mut params = vec![];
-	if let self.peek().token_type != TokenType::RightParen {
+	if self.peek().token_type != TokenType::RightParen {
 	    params = self.parameters()?;
 	}
 
 	self.expect(TokenType::RightParen)?;
 	self.expect(TokenType::LeftBrace)?;
 
-	let stmts = self.block_stmts()?;
-	let stmt_kind = ast::StmtKind::FunStmt(fun_name, params, stmts);
+	let body = self.block_stmts()?;
+	let fun_def = Rc::new(ast::FunDef{name, params, body});
+	let stmt_kind = ast::StmtKind::FunStmt(fun_def);
 	Ok(Box::new(ast::Stmt { stmt_kind }))
     }
 
     fn parameters(&mut self) -> Result<Vec<ast::Ident>, ParseError> {
-	let params = vec![ self.ident()? ];
+	let mut params = vec![ self.ident()? ];
 	while self.peek().token_type == TokenType::Comma {
 	    if params.len() >= 255 {
 		let tok = self.peek();
@@ -171,6 +175,9 @@ impl<'a> Parser<'a> {
 		self.advance();
 
 		self.print_stmt()
+	    }
+	    TokenType::Return => {
+		self.return_stmt()
 	    }
 	    TokenType::LeftBrace => {
 		// consume '{'
@@ -208,6 +215,20 @@ impl<'a> Parser<'a> {
 	let expr = self.expression()?;
 	self.expect(TokenType::Semicolon)?;
 	let stmt_kind = ast::StmtKind::PrintStmt(expr);
+	Ok(Box::new(ast::Stmt { stmt_kind }))
+    }
+
+    fn return_stmt(&mut self) ->  Result<Box<ast::Stmt>, ParseError> {
+	let rtok = self.peek();
+	// consume "return"
+	self.advance();
+
+	let mut expr = None;
+	if self.peek().token_type != TokenType::Semicolon {
+	    expr = Some(self.expression()?);
+	}
+	self.expect(TokenType::Semicolon)?;
+	let stmt_kind = ast::StmtKind::RetStmt(rtok, expr);
 	Ok(Box::new(ast::Stmt { stmt_kind }))
     }
 
@@ -484,7 +505,7 @@ impl<'a> Parser<'a> {
 	    self.advance();
 
 	    let mut args = vec![];
-	    if let self.peek().token_type != TokenType::RightParen {
+	    if self.peek().token_type != TokenType::RightParen {
 		args = self.arguments()?;
 	    }
 	    let close_paren = self.peek();
@@ -496,7 +517,7 @@ impl<'a> Parser<'a> {
     }
 
     fn arguments(&mut self) -> Result<Vec<Box<ast::Expr>>, ParseError> {
-	let args = vec![ self.expression()? ];
+	let mut args = vec![ self.expression()? ];
 	while self.peek().token_type == TokenType::Comma {
 	    if args.len() >= 255 {
 		let tok = self.peek();

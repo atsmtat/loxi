@@ -1,15 +1,46 @@
 use std::collections::HashMap;
 use std::collections::LinkedList;
+use std::rc::Rc;
 use crate::ast;
-use crate::ast::{Expr, ExprKind, Stmt, StmtKind, Lit, Ident, Visitor};
+use crate::ast::{Expr, ExprKind, Stmt, StmtKind, Lit, Ident, Visitor, FunDef};
 use crate::token::{TokenType, Token};
 
 #[derive(Clone, Debug)]
-pub enum LoxType {
+enum LoxType {
     Nil,
     Boolean(bool),
     Double(f64),
     Str(String),
+    Fun(Rc<FunDef>),
+}
+
+trait LoxCallable {
+    fn call(&self, interpreter: &mut Interpreter, args: &Vec<LoxValue>) -> Result<LoxValue, RuntimeError>;
+    fn arity(&self) -> usize;
+}
+
+impl LoxCallable for FunDef {
+    fn call(&self, interpreter: &mut Interpreter, args: &Vec<LoxValue>) -> Result<LoxValue, RuntimeError> {
+	interpreter.push_environment();
+	for i in 0..self.params.len() {
+	    interpreter.define(&self.params[i], args[i].clone());
+	}
+
+	let mut ret_val = LoxValue{lox_type: LoxType::Nil};
+	interpreter.execute_block(&self.body)
+	    .unwrap_or_else(|err| {
+		match err {
+		    RuntimeError::FunctionReturn(rv) => { ret_val = rv }
+		    _ => {}
+		}
+	    });
+	interpreter.pop_environment();
+	Ok(ret_val)
+    }
+
+    fn arity(&self) -> usize {
+	self.params.len()
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -32,29 +63,29 @@ impl LoxValue {
             _ => true,
         }
     }
-
 }
 
 pub enum RuntimeError {
     InvalidOperator,
     InvalidOperand,
     UndefinedVariable,
+    FunctionReturn(LoxValue),
 }
 
-pub struct Environment {
+struct Environment {
     pub values: HashMap<String, LoxValue>,
 }
 
 impl Environment {
-    pub fn new() -> Environment {
+    fn new() -> Self {
 	Environment{ values : HashMap::new() }
     }
 
-    pub fn define(&mut self, ident:&Ident, value:LoxValue) {
+    fn define(&mut self, ident:&Ident, value:LoxValue) {
 	self.values.insert(ident.name.clone(), value);
     }
 
-    pub fn get(&self, ident:&Ident) -> Option<LoxValue> {
+    fn get(&self, ident:&Ident) -> Option<LoxValue> {
 	if let Some(lv) = self.values.get(&ident.name) {
 	    Some(lv.clone())
 	} else {
@@ -62,7 +93,7 @@ impl Environment {
 	}
     }
 
-    pub fn assign(&mut self, ident:&Ident, value:&LoxValue) -> bool {
+    fn assign(&mut self, ident:&Ident, value:&LoxValue) -> bool {
 	if self.values.contains_key(&ident.name) {
 	    self.values.insert(ident.name.clone(), value.clone());
 	    true
@@ -78,7 +109,7 @@ pub struct Interpreter {
 }
 
 impl Interpreter {
-    pub fn new() -> Interpreter {
+    pub fn new() -> Self {
 	Interpreter{ has_error: false, environments: LinkedList::new(), }
     }
 
@@ -102,7 +133,7 @@ impl Interpreter {
 	self.environments.pop_front();
     }
 
-    pub fn define(&mut self, ident:&Ident, value:LoxValue) {
+    fn define(&mut self, ident:&Ident, value:LoxValue) {
 	if let Some(curr_env) = self.environments.front_mut() {
 	    curr_env.define(ident, value);
 	} else {
@@ -110,7 +141,7 @@ impl Interpreter {
 	}
     }
 
-    pub fn get(&mut self, ident:&Ident) -> Result<LoxValue, RuntimeError> {
+    fn get(&mut self, ident:&Ident) -> Result<LoxValue, RuntimeError> {
 	// search for identifier, starting from inner most environment,
 	// following up the chain of enclosing environments
 	for env in self.environments.iter() {
@@ -123,7 +154,7 @@ impl Interpreter {
 	return Err(RuntimeError::UndefinedVariable);
     }
 
-    pub fn assign(&mut self, ident:&Ident, value:&LoxValue) -> Result<(), RuntimeError> {
+    fn assign(&mut self, ident:&Ident, value:&LoxValue) -> Result<(), RuntimeError> {
 	for env in self.environments.iter_mut() {
 	    if env.assign(ident, value) {
 		return Ok(());
@@ -162,9 +193,7 @@ impl Interpreter {
     }
 
     fn execute_block(&mut self, stmts:&Vec<Box<Stmt>>) -> Result<(), RuntimeError> {
-	self.push_environment();
 	let mut result = Ok(());
-
 	for stmt in stmts {
 	    result = self.execute(stmt);
 	    match result {
@@ -172,7 +201,6 @@ impl Interpreter {
 		Ok(_) => {}
 	    }
 	}
-	self.pop_environment();
 	result
     }
 
@@ -336,6 +364,32 @@ impl ast::Visitor for Interpreter {
 		self.assign(ident, &rval)?;
 		Ok(rval)
 	    }
+
+	    ExprKind::CallExpr(ref callee_expr, ref paren_tok, ref arg_exprs) => {
+		let callee = self.evaluate( callee_expr )?;
+		match callee.lox_type {
+		    LoxType::Fun(lox_fun) => {
+			let mut args = vec![];
+			for ae in arg_exprs {
+			    args.push(self.evaluate(ae)?);
+			}
+
+			if lox_fun.arity() != args.len() {
+			    let err = format!( "Expected {} arguments, but got {}",
+						lox_fun.arity(),
+						args.len() );
+			    self.report_error(paren_tok, &err );
+			    return Err(RuntimeError::InvalidOperand);
+			}
+
+			lox_fun.call(self, &args)
+		    }
+		    _ => {
+			self.report_error(paren_tok, "Can only call functions and classes");
+			Err(RuntimeError::InvalidOperator)
+		    }
+		}
+	    }
         }
     }
 
@@ -383,7 +437,28 @@ impl ast::Visitor for Interpreter {
 	    }
 
 	    StmtKind::BlockStmt(ref stmts) => {
-		self.execute_block(stmts)
+		self.push_environment();
+		let result = self.execute_block(stmts);
+		self.pop_environment();
+		result
+	    }
+
+	    StmtKind::FunStmt(ref fdef) => {
+		let lox_val = LoxValue{lox_type: LoxType::Fun(fdef.clone())};
+		self.define(&fdef.name, lox_val);
+		Ok(())
+	    }
+
+	    StmtKind::RetStmt(_, ref ret_expr) => {
+		let ret_val = match ret_expr {
+		    Some(ref re) => {
+			self.evaluate(re)?
+		    }
+		    None => {
+			LoxValue{lox_type: LoxType::Nil}
+		    }
+		};
+		Err(RuntimeError::FunctionReturn(ret_val))
 	    }
 	}
     }
