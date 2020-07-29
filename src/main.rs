@@ -8,13 +8,10 @@ fn main() {
         print_help();
         process::exit(64);
     } else if args.len() == 2 {
-        loxi::run_file(&args[1]).unwrap_or_else(|error| {
-	    match error {
-		loxi::Error::ScannerError |
-		loxi::Error::ParserError => process::exit(65),
-		loxi::Error::RuntimeError => process::exit(70),
-	    }
-	});
+        loxi::run_file(&args[1]).unwrap_or_else(|error| match error {
+            loxi::Error::ScannerError | loxi::Error::ParserError => process::exit(65),
+            loxi::Error::RuntimeError => process::exit(70),
+        });
     } else {
         loxi::run_prompt().unwrap_or_else(|error| {
             println!("error reading input: {}", error);

@@ -1,7 +1,5 @@
-
 #[derive(Clone, Debug, PartialEq)]
 pub enum TokenType {
-
     // single character
     LeftParen,
     RightParen,
@@ -27,8 +25,8 @@ pub enum TokenType {
 
     // literals
     Identifier(String),
-    Str{ val: String },
-    Number{ val: f64 },
+    Str { val: String },
+    Number { val: f64 },
 
     // keywords
     And,
@@ -60,7 +58,7 @@ pub struct Token {
 }
 
 impl Token {
-    pub fn new(token_type: TokenType, line: u32 ) -> Token {
-	Token{token_type, line}
+    pub fn new(token_type: TokenType, line: u32) -> Token {
+        Token { token_type, line }
     }
 }

@@ -1,11 +1,11 @@
 use crate::token::Token;
-use std::marker::Sized;
 use std::fmt::Write;
+use std::marker::Sized;
 use std::rc::Rc;
 
 #[derive(Debug)]
 pub struct Expr {
-    pub expr_kind : ExprKind,
+    pub expr_kind: ExprKind,
 }
 
 #[derive(Debug)]
@@ -19,12 +19,15 @@ pub enum Lit {
 #[derive(Debug)]
 pub struct Ident {
     pub name: String,
-    pub tok : Token,
+    pub tok: Token,
 }
 
 impl Ident {
     pub fn new(nm: &str, tok: Token) -> Ident {
-	Ident{ name: nm.to_string(), tok}
+        Ident {
+            name: nm.to_string(),
+            tok,
+        }
     }
 }
 
@@ -32,7 +35,7 @@ impl Ident {
 pub enum ExprKind {
     // assignment
     Assign(Ident, Box<Expr>),
-    
+
     // binary expr `left Op right`
     BinaryExpr(Box<Expr>, Token, Box<Expr>),
 
@@ -57,7 +60,7 @@ pub enum ExprKind {
 
 #[derive(Debug)]
 pub struct Stmt {
-    pub stmt_kind : StmtKind,
+    pub stmt_kind: StmtKind,
 }
 
 #[derive(Debug)]
@@ -81,130 +84,130 @@ pub enum StmtKind {
 
 #[derive(Debug)]
 pub struct FunDef {
-    pub name : Ident,
-    pub params : Vec<Ident>,
-    pub body : Vec<Box<Stmt>>,
+    pub name: Ident,
+    pub params: Vec<Ident>,
+    pub body: Vec<Box<Stmt>>,
 }
 
-pub trait Visitor : Sized {
+pub trait Visitor: Sized {
     type ExprRet;
     type StmtRet;
-    fn visit_expr(&mut self, expr:&Expr) -> Self::ExprRet;
-    fn visit_stmt(&mut self, stmt:&Stmt) -> Self::StmtRet;
+    fn visit_expr(&mut self, expr: &Expr) -> Self::ExprRet;
+    fn visit_stmt(&mut self, stmt: &Stmt) -> Self::StmtRet;
 }
 
-pub fn walk_expr<V: Visitor>(visitor:&mut V, expr:&Expr) {
+pub fn walk_expr<V: Visitor>(visitor: &mut V, expr: &Expr) {
     match &expr.expr_kind {
-	ExprKind::Assign(_, expr) => {
-	    visitor.visit_expr(expr);
-	}
-	ExprKind::BinaryExpr(left, _, right) => {
-	    visitor.visit_expr(left);
-	    visitor.visit_expr(right);
-	}
-	ExprKind::LogicalExpr(left, _, right) => {
-	    visitor.visit_expr(left);
-	    visitor.visit_expr(right);
-	}
-	ExprKind::ParenExpr(e) |
-	ExprKind::UnaryExpr(_, e) => {
-	    visitor.visit_expr(e);
-	}
-	ExprKind::CallExpr(ref callee, _, ref args) => {
-	    visitor.visit_expr(callee);
-	    for arg in args {
-		visitor.visit_expr(arg);
-	    }
-	}
-	_ => {}
+        ExprKind::Assign(_, expr) => {
+            visitor.visit_expr(expr);
+        }
+        ExprKind::BinaryExpr(left, _, right) => {
+            visitor.visit_expr(left);
+            visitor.visit_expr(right);
+        }
+        ExprKind::LogicalExpr(left, _, right) => {
+            visitor.visit_expr(left);
+            visitor.visit_expr(right);
+        }
+        ExprKind::ParenExpr(e) | ExprKind::UnaryExpr(_, e) => {
+            visitor.visit_expr(e);
+        }
+        ExprKind::CallExpr(ref callee, _, ref args) => {
+            visitor.visit_expr(callee);
+            for arg in args {
+                visitor.visit_expr(arg);
+            }
+        }
+        _ => {}
     }
 }
 
-pub fn walk_stmt<V: Visitor>(visitor:&mut V, stmt:&Stmt) {
+pub fn walk_stmt<V: Visitor>(visitor: &mut V, stmt: &Stmt) {
     match stmt.stmt_kind {
-	StmtKind::ExprStmt(ref expr) => {
-	    visitor.visit_expr(expr);
-	}
-	StmtKind::PrintStmt(ref expr) => {
-	    visitor.visit_expr(expr);
-	}
-	StmtKind::VarStmt(_, ref initializer) => {
-	    if let Some(expr) = initializer {
-		visitor.visit_expr(expr);
-	    }
-	}
-	StmtKind::BlockStmt(ref stmts) => {
-	    for stmt in stmts {
-		visitor.visit_stmt(stmt);
-	    }
-	}
-	_ => {}
+        StmtKind::ExprStmt(ref expr) => {
+            visitor.visit_expr(expr);
+        }
+        StmtKind::PrintStmt(ref expr) => {
+            visitor.visit_expr(expr);
+        }
+        StmtKind::VarStmt(_, ref initializer) => {
+            if let Some(expr) = initializer {
+                visitor.visit_expr(expr);
+            }
+        }
+        StmtKind::BlockStmt(ref stmts) => {
+            for stmt in stmts {
+                visitor.visit_stmt(stmt);
+            }
+        }
+        _ => {}
     }
 }
 
 pub struct AstPrinter<'ast> {
-    root : &'ast Expr,
-    pub ast_print : String,
+    root: &'ast Expr,
+    pub ast_print: String,
 }
 
 impl<'ast> AstPrinter<'ast> {
     pub fn new(root: &'ast Expr) -> Self {
-	AstPrinter{
-	    root,
-	    ast_print: String::new(),
-	}
+        AstPrinter {
+            root,
+            ast_print: String::new(),
+        }
     }
 
     pub fn print(&mut self) {
-	self.visit_expr(self.root);
+        self.visit_expr(self.root);
     }
 }
 
 impl<'ast> Visitor for AstPrinter<'ast> {
     type ExprRet = ();
     type StmtRet = ();
-    fn visit_expr(&mut self, expr:&Expr) -> Self::ExprRet {
-	self.ast_print.push( '(' );
-	match &expr.expr_kind {
-	    ExprKind::Assign(ident, _) => {
-		write!(&mut self.ast_print, "assignment to '{}'", ident.name).unwrap();
-	    }
-	    ExprKind::BinaryExpr(_, tok, _) => {
-		write!(&mut self.ast_print, "{:?}", tok.token_type).unwrap();
-	    }
-	    ExprKind::LogicalExpr(_, tok, _) => {
-		write!(&mut self.ast_print, "{:?}", tok.token_type).unwrap();
-	    }
-	    ExprKind::ParenExpr(_) => self.ast_print.push_str("paren"),
-	    ExprKind::UnaryExpr(tok, _) => {
-		write!(&mut self.ast_print, "{:?}", tok.token_type).unwrap();
-	    }
-	    ExprKind::LitExpr(lit) => {
-		write!(&mut self.ast_print, "{:?}", lit).unwrap();
-	    }
-	    ExprKind::Variable(ident) => {
-		write!(&mut self.ast_print, "{:?}", &ident.name).unwrap();
-	    }
-	    ExprKind::CallExpr(_,_,_) => { self.ast_print.push_str("call expr"); }
-	}
-	walk_expr(self, expr);
-	self.ast_print.push(')');
+    fn visit_expr(&mut self, expr: &Expr) -> Self::ExprRet {
+        self.ast_print.push('(');
+        match &expr.expr_kind {
+            ExprKind::Assign(ident, _) => {
+                write!(&mut self.ast_print, "assignment to '{}'", ident.name).unwrap();
+            }
+            ExprKind::BinaryExpr(_, tok, _) => {
+                write!(&mut self.ast_print, "{:?}", tok.token_type).unwrap();
+            }
+            ExprKind::LogicalExpr(_, tok, _) => {
+                write!(&mut self.ast_print, "{:?}", tok.token_type).unwrap();
+            }
+            ExprKind::ParenExpr(_) => self.ast_print.push_str("paren"),
+            ExprKind::UnaryExpr(tok, _) => {
+                write!(&mut self.ast_print, "{:?}", tok.token_type).unwrap();
+            }
+            ExprKind::LitExpr(lit) => {
+                write!(&mut self.ast_print, "{:?}", lit).unwrap();
+            }
+            ExprKind::Variable(ident) => {
+                write!(&mut self.ast_print, "{:?}", &ident.name).unwrap();
+            }
+            ExprKind::CallExpr(_, _, _) => {
+                self.ast_print.push_str("call expr");
+            }
+        }
+        walk_expr(self, expr);
+        self.ast_print.push(')');
     }
 
-    fn visit_stmt(&mut self, stmt:&Stmt) -> Self::StmtRet {
-	self.ast_print.push( '(' );
-	match stmt.stmt_kind {
-	    StmtKind::ExprStmt(_) => self.ast_print.push_str("expr stmt"),
-	    StmtKind::PrintStmt(_) => self.ast_print.push_str("print stmt"),
-	    StmtKind::VarStmt(_, _) => self.ast_print.push_str("variable stmt"),
-	    StmtKind::BlockStmt(_) => self.ast_print.push_str("block stmt"),
-	    StmtKind::IfStmt(_,_,_) => self.ast_print.push_str("if stmt"),
-	    StmtKind::WhileStmt(_,_) => self.ast_print.push_str("while stmt"),
-	    StmtKind::FunStmt(..) => self.ast_print.push_str("function stmt"),
-	    StmtKind::RetStmt(..) => self.ast_print.push_str("return stmt"),
-	}
-	walk_stmt(self, stmt);
-	self.ast_print.push(')');
+    fn visit_stmt(&mut self, stmt: &Stmt) -> Self::StmtRet {
+        self.ast_print.push('(');
+        match stmt.stmt_kind {
+            StmtKind::ExprStmt(_) => self.ast_print.push_str("expr stmt"),
+            StmtKind::PrintStmt(_) => self.ast_print.push_str("print stmt"),
+            StmtKind::VarStmt(_, _) => self.ast_print.push_str("variable stmt"),
+            StmtKind::BlockStmt(_) => self.ast_print.push_str("block stmt"),
+            StmtKind::IfStmt(_, _, _) => self.ast_print.push_str("if stmt"),
+            StmtKind::WhileStmt(_, _) => self.ast_print.push_str("while stmt"),
+            StmtKind::FunStmt(..) => self.ast_print.push_str("function stmt"),
+            StmtKind::RetStmt(..) => self.ast_print.push_str("return stmt"),
+        }
+        walk_stmt(self, stmt);
+        self.ast_print.push(')');
     }
 }
-
